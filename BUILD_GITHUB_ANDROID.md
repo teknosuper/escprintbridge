@@ -148,7 +148,7 @@ GitHub Actions akan menjalankan langkah berikut:
 
 1. checkout source code
 2. install Java 17
-3. setup Gradle
+3. install Gradle 8.7
 4. decode keystore jika secrets tersedia
 5. build `debug APK`
 6. build `release APK`
