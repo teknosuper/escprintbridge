@@ -109,7 +109,7 @@ class BridgeForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(content)
-            .setSmallIcon(android.R.drawable.stat_sys_print)
+            .setSmallIcon(R.drawable.ic_bridge)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
