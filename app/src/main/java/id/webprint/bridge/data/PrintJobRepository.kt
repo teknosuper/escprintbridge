@@ -22,4 +22,8 @@ class PrintJobRepository(
         apiClient.markFailed(settings, jobId, reason)
         lastFetchedJobIds = lastFetchedJobIds.filterNot { it == jobId }
     }
+
+    fun getPollUrl(settings: BridgeSettings = settingsRepository.load()): String {
+        return apiClient.buildPollUrlForDisplay(settings)
+    }
 }

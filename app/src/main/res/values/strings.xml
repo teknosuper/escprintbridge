@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Web Print Bridge</string>
+    <string name="status_idle_banner">Siap digunakan. Isi konfigurasi lalu klik Mulai.</string>
     <string name="title_setup">Setup Print Bridge</string>
+    <string name="title_stats">Statistik</string>
+    <string name="title_logs">Log Aktivitas</string>
+    <string name="stat_printed_label">DICETAK</string>
+    <string name="stat_failed_label">GAGAL</string>
+    <string name="stat_polls_label">POLLS</string>
     <string name="hint_client_url">URL print-client.html lengkap dengan query string</string>
     <string name="button_import_client_url">Import Dari URL Client</string>
     <string name="hint_base_url">Base URL Server POS, contoh http://192.168.1.10:8000</string>
@@ -26,6 +32,10 @@
     <string name="button_save">Simpan</string>
     <string name="button_start">Start Service</string>
     <string name="button_stop">Stop Service</string>
+    <string name="button_start_polling">Mulai Polling</string>
+    <string name="button_stop_polling">Stop Polling</string>
+    <string name="button_test_connection">Test Koneksi</string>
+    <string name="button_test_printer">Test Printer</string>
     <string name="settings_saved">Konfigurasi tersimpan.</string>
     <string name="client_url_imported">Konfigurasi berhasil diimpor dari URL client.</string>
     <string name="service_running">Status service: berjalan</string>
@@ -41,6 +51,15 @@
     <string name="status_polling">Polling: %1$d detik</string>
     <string name="service_start_requested">Permintaan start dikirim. Service akan berjalan di background dengan notifikasi tetap.</string>
     <string name="service_stop_requested">Permintaan stop dikirim.</string>
+    <string name="start_blocked_validation">Start dibatalkan karena validasi koneksi gagal.</string>
+    <string name="connection_check_ok">Validasi koneksi berhasil.</string>
+    <string name="connection_check_failed">Validasi koneksi gagal. Cek log aktivitas.</string>
+    <string name="printer_test_ok">Test printer berhasil.</string>
+    <string name="printer_test_failed">Test printer gagal. Cek log aktivitas.</string>
+    <string name="alert_validation_failed_title">Validasi Gagal</string>
+    <string name="alert_connection_failed_title">Koneksi Gagal</string>
+    <string name="alert_printer_failed_title">Printer Gagal</string>
+    <string name="alert_runtime_error_title">Error Runtime</string>
     <string name="notification_permission_warning">Izin notifikasi ditolak. Pada Android 13+, foreground service tetap lebih stabil jika izin ini diizinkan.</string>
     <string name="bluetooth_permission_warning">Izin Bluetooth ditolak. Printer Bluetooth tidak bisa dipilih tanpa izin ini.</string>
     <string name="bluetooth_not_available">Bluetooth tidak tersedia di device ini.</string>
@@ -49,6 +68,7 @@
     <string name="dialog_bluetooth_printer_title">Pilih Printer Bluetooth</string>
     <string name="error_client_url_required">URL client wajib diisi.</string>
     <string name="error_client_url_invalid">URL client tidak valid.</string>
+    <string name="error_localhost_android">`localhost` di Android menunjuk ke HP sendiri. Gunakan domain/IP server POS yang benar.</string>
     <string name="channel_name">Print Bridge Service</string>
     <string name="channel_description">Menjaga bridge print tetap aktif di background</string>
     <string name="notification_idle">Service aktif.</string>

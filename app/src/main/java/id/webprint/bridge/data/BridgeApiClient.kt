@@ -11,6 +11,11 @@ import java.util.concurrent.TimeUnit
 
 class BridgeApiClient {
 
+    data class QueueHttpResponse(
+        val code: Int,
+        val body: String,
+    )
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -18,6 +23,21 @@ class BridgeApiClient {
         .build()
 
     fun fetchJobs(settings: BridgeSettings): List<PrintJob> {
+        val response = fetchQueueResponse(settings)
+        if (response.code !in 200..299) {
+            error("Fetch job failed with HTTP ${response.code}")
+        }
+
+        val body = response.body
+        val json = JSONObject(body)
+        return when {
+            json.has("jobs") -> parseQueueJobs(json.optJSONArray("jobs"))
+            json.isNull("job") -> emptyList()
+            else -> listOf(PrintJob.fromJson(json.getJSONObject("job")))
+        }
+    }
+
+    fun fetchQueueResponse(settings: BridgeSettings): QueueHttpResponse {
         val pollUrl = buildPollUrl(settings)
         val request = Request.Builder()
             .url(pollUrl)
@@ -26,18 +46,16 @@ class BridgeApiClient {
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                error("Fetch job failed with HTTP ${response.code}")
-            }
-
             val body = response.body?.string().orEmpty()
-            val json = JSONObject(body)
-            return when {
-                json.has("jobs") -> parseQueueJobs(json.optJSONArray("jobs"))
-                json.isNull("job") -> emptyList()
-                else -> listOf(PrintJob.fromJson(json.getJSONObject("job")))
-            }
+            return QueueHttpResponse(
+                code = response.code,
+                body = body,
+            )
         }
+    }
+
+    fun buildPollUrlForDisplay(settings: BridgeSettings): String {
+        return buildPollUrl(settings)
     }
 
     fun markComplete(settings: BridgeSettings, jobId: String) {

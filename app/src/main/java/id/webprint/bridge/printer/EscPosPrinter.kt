@@ -334,7 +334,7 @@ class EscPosPrinter {
     }
 
     companion object {
-        private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val INITIALIZE = byteArrayOf(0x1B, 0x40)
         private val LINE_BREAK = byteArrayOf(0x0A)
         private val BOLD_ON = byteArrayOf(0x1B, 0x45, 0x01)

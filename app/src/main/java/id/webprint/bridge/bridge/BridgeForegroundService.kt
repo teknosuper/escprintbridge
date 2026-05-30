@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import id.webprint.bridge.MainActivity
 import id.webprint.bridge.R
 import id.webprint.bridge.data.PrintJobRepository
+import id.webprint.bridge.data.RuntimeStateRepository
 import id.webprint.bridge.data.SettingsRepository
 import id.webprint.bridge.printer.EscPosPrinter
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ class BridgeForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var runtimeStateRepository: RuntimeStateRepository
     private lateinit var printJobRepository: PrintJobRepository
     private lateinit var printer: EscPosPrinter
     private var loopJob: Job? = null
@@ -35,6 +37,7 @@ class BridgeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         settingsRepository = SettingsRepository(this)
+        runtimeStateRepository = RuntimeStateRepository(this)
         printJobRepository = PrintJobRepository(settingsRepository)
         printer = EscPosPrinter()
         createNotificationChannel()
@@ -43,38 +46,47 @@ class BridgeForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (loopJob?.isActive == true) {
+            runtimeStateRepository.appendLog("Polling sudah aktif.")
             return START_STICKY
         }
 
+        runtimeStateRepository.setPolling(true, "Polling aktif.")
         loopJob = serviceScope.launch {
             while (isActive) {
                 val settings = settingsRepository.load()
                 if (!settings.isReady()) {
                     updateNotification(getString(R.string.notification_waiting_config))
+                    runtimeStateRepository.appendLog("Konfigurasi belum lengkap.")
                     delay(5_000)
                     continue
                 }
 
                 var printDelivered = false
                 try {
+                    val pollUrl = printJobRepository.getPollUrl(settings)
                     updateNotification(getString(R.string.notification_polling, settings.baseUrl))
+                    runtimeStateRepository.registerPoll("Polling dimulai: $pollUrl")
                     val jobs = printJobRepository.fetchJobs(settings)
                     if (jobs.isEmpty()) {
                         delay(settings.pollingSeconds.coerceAtLeast(2L) * 1_000L)
                         continue
                     }
 
+                    runtimeStateRepository.appendLog("📥 ${jobs.size} job baru diterima")
                     for (job in jobs) {
                         printDelivered = false
                         updateNotification(getString(R.string.notification_printing, job.id))
+                        runtimeStateRepository.appendLog("🖨️ Mencetak job #${job.id}")
                         printer.print(job, settings)
                         printDelivered = true
                         printJobRepository.markComplete(settings, job.id)
+                        runtimeStateRepository.registerPrinted("✅ Job #${job.id} berhasil dicetak")
                         updateNotification(getString(R.string.notification_success, job.id))
                     }
                 } catch (exception: Exception) {
                     val message = exception.message ?: exception.javaClass.simpleName
                     updateNotification(getString(R.string.notification_error, message))
+                    runtimeStateRepository.registerFailed("❌ Error polling/cetak: $message")
                     val lastJobId = printJobRepository.lastFetchedJobIds.firstOrNull()
                     if (!printDelivered && !lastJobId.isNullOrBlank()) {
                         runCatching {
@@ -91,6 +103,7 @@ class BridgeForegroundService : Service() {
 
     override fun onDestroy() {
         loopJob?.cancel()
+        runtimeStateRepository.setPolling(false, "Polling dihentikan.")
         serviceScope.cancel()
         super.onDestroy()
     }
