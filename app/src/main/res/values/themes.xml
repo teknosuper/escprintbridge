@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.WebPrintBridge" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/bridge_blue</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSurface">@color/bridge_sand</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/bridge_ink</item>
+        <item name="android:windowBackground">@color/bridge_sand</item>
+    </style>
+</resources>
