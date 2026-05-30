@@ -153,11 +153,27 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/paperWidthInput"
+            <AutoCompleteTextView
+                android:id="@+id/paperWidthPresetInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="@string/hint_paper_width_columns"
+                android:hint="@string/hint_paper_width_preset"
+                android:inputType="none"
+                android:importantForAutofill="no" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/paperWidthCustomColumnsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/paperWidthCustomColumnsInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/hint_paper_width_custom_columns"
                 android:inputType="number" />
         </com.google.android.material.textfield.TextInputLayout>
 

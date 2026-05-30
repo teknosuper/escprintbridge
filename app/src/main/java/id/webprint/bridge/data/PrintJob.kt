@@ -23,36 +23,40 @@ data class PrintJob(
         fun fromJson(json: JSONObject): PrintJob {
             val printer = json.optJSONObject("printer")
             val payload = json.getJSONObject("payload")
-            val rawBase64 = payload.optString("raw_base64").ifBlank { null }
+            val rawBase64 = cleanNullable(payload.optString("raw_base64"))
             return PrintJob(
                 id = json.getString("id"),
-                type = json.optString("type").ifBlank { null },
-                printerMode = printer?.optString("mode")?.ifBlank { null },
-                printerHost = printer?.optString("host")?.ifBlank { null },
+                type = cleanNullable(json.optString("type")),
+                printerMode = cleanNullable(printer?.optString("mode")),
+                printerHost = cleanNullable(printer?.optString("host")),
                 printerPort = printer?.optInt("port")?.takeIf { it != 0 },
-                bluetoothMacAddress = printer?.optString("bluetooth_mac_address")?.ifBlank { null },
+                bluetoothMacAddress = cleanNullable(printer?.optString("bluetooth_mac_address")),
                 timeoutMs = printer?.optInt("timeout_ms")?.takeIf { it != 0 },
                 lines = payload.optJSONArray("lines").toPrintLines(),
                 rawBytes = rawBase64?.let { Base64.decode(it, Base64.DEFAULT) },
-                paperWidth = payload.optString("paper_width").ifBlank { null },
-                receiptLayout = null,
-                transaction = null,
-                kitchenTicket = null,
+                paperWidth = cleanNullable(payload.optString("paper_width")),
+                receiptLayout = json.optJSONObject("layout")?.toReceiptLayout(),
+                transaction = json.optJSONObject("transaction")?.toTransactionPayload(),
+                kitchenTicket = json.optJSONObject("ticket")?.toKitchenTicketPayload(json.optJSONObject("station")),
             )
         }
 
         fun fromPosQueueJson(json: JSONObject): PrintJob {
+            val printer = json.optJSONObject("printer")
+            val payload = json.optJSONObject("payload")
+            val rawBase64 = cleanNullable(payload?.optString("raw_base64"))
             return PrintJob(
                 id = json.get("id").toString(),
-                type = json.optString("type").ifBlank { null },
-                printerMode = null,
-                printerHost = null,
-                printerPort = null,
-                bluetoothMacAddress = null,
-                timeoutMs = null,
-                lines = emptyList(),
-                rawBytes = null,
-                paperWidth = json.optString("paper_width").ifBlank { null },
+                type = cleanNullable(json.optString("type")),
+                printerMode = cleanNullable(printer?.optString("mode")),
+                printerHost = cleanNullable(printer?.optString("host")),
+                printerPort = printer?.optInt("port")?.takeIf { it != 0 },
+                bluetoothMacAddress = cleanNullable(printer?.optString("bluetooth_mac_address")),
+                timeoutMs = printer?.optInt("timeout_ms")?.takeIf { it != 0 },
+                lines = payload?.optJSONArray("lines").toPrintLines(),
+                rawBytes = rawBase64?.let { Base64.decode(it, Base64.DEFAULT) },
+                paperWidth = cleanNullable(json.optString("paper_width"))
+                    ?: cleanNullable(payload?.optString("paper_width")),
                 receiptLayout = json.optJSONObject("layout")?.toReceiptLayout(),
                 transaction = json.optJSONObject("transaction")?.toTransactionPayload(),
                 kitchenTicket = json.optJSONObject("ticket")?.toKitchenTicketPayload(json.optJSONObject("station")),
@@ -69,11 +73,11 @@ data class PrintJob(
                     val item = getJSONObject(index)
                     add(
                         PrintLine(
-                            text = item.optString("text").ifBlank { null },
-                            align = item.optString("align").ifBlank { "left" },
+                            text = cleanNullable(item.optString("text")),
+                            align = cleanNullable(item.optString("align")) ?: "left",
                             bold = item.optBoolean("bold"),
                             feed = item.optInt("feed"),
-                            cut = item.optString("cut").ifBlank { null },
+                            cut = cleanNullable(item.optString("cut")),
                         ),
                     )
                 }
@@ -92,20 +96,20 @@ data class PrintJob(
 
         private fun JSONObject.toTransactionPayload(): JobTransaction {
             return JobTransaction(
-                invoice = optString("invoice").ifBlank { null },
-                date = optString("date").ifBlank { null },
-                customer = optString("customer").ifBlank { null },
-                orderType = optString("order_type").ifBlank { null },
+                invoice = cleanNullable(optString("invoice")),
+                date = cleanNullable(optString("date")),
+                customer = cleanNullable(optString("customer")),
+                orderType = cleanNullable(optString("order_type")),
             )
         }
 
         private fun JSONObject.toKitchenTicketPayload(stationJson: JSONObject?): KitchenTicketPayload {
             return KitchenTicketPayload(
-                number = optString("number").ifBlank { null },
-                notes = optString("notes").ifBlank { null },
-                createdAt = optString("created_at").ifBlank { null },
-                stationName = stationJson?.optString("name")?.ifBlank { null },
-                stationCode = stationJson?.optString("code")?.ifBlank { null },
+                number = cleanNullable(optString("number")),
+                notes = cleanNullable(optString("notes")),
+                createdAt = cleanNullable(optString("created_at")),
+                stationName = cleanNullable(stationJson?.optString("name")),
+                stationCode = cleanNullable(stationJson?.optString("code")),
                 items = optJSONArray("items").toKitchenItems(),
             )
         }
@@ -120,8 +124,8 @@ data class PrintJob(
                     val item = getJSONObject(index)
                     add(
                         LabelValueRow(
-                            label = item.optString("label"),
-                            value = item.optString("value"),
+                            label = cleanNullable(item.optString("label")).orEmpty(),
+                            value = cleanNullable(item.optString("value")).orEmpty(),
                             strong = item.optBoolean("strong"),
                         ),
                     )
@@ -139,11 +143,11 @@ data class PrintJob(
                     val item = getJSONObject(index)
                     add(
                         ReceiptItemPayload(
-                            name = item.optString("name"),
-                            detailLeft = item.optString("detail_left").ifBlank { null },
-                            detailRight = item.optString("detail_right").ifBlank { null },
-                            promo = item.optString("promo").ifBlank { null },
-                            notes = item.optString("notes").ifBlank { null },
+                            name = cleanNullable(item.optString("name")).orEmpty(),
+                            detailLeft = cleanNullable(item.optString("detail_left")),
+                            detailRight = cleanNullable(item.optString("detail_right")),
+                            promo = cleanNullable(item.optString("promo")),
+                            notes = cleanNullable(item.optString("notes")),
                             modifiers = item.optJSONArray("modifiers").toLabelRows(),
                         ),
                     )
@@ -161,9 +165,9 @@ data class PrintJob(
                     val item = getJSONObject(index)
                     add(
                         KitchenItemPayload(
-                            name = item.optString("name"),
+                            name = cleanNullable(item.optString("name")).orEmpty(),
                             qty = item.optDouble("qty", 0.0),
-                            notes = item.optString("notes").ifBlank { null },
+                            notes = cleanNullable(item.optString("notes")),
                         ),
                     )
                 }
@@ -177,9 +181,17 @@ data class PrintJob(
 
             return buildList(length()) {
                 for (index in 0 until length()) {
-                    add(optString(index))
+                    cleanNullable(optString(index))?.let(::add)
                 }
             }
+        }
+
+        private fun cleanNullable(value: String?): String? {
+            val cleaned = value?.trim().orEmpty()
+            if (cleaned.isBlank()) {
+                return null
+            }
+            return if (cleaned.equals("null", ignoreCase = true)) null else cleaned
         }
     }
 }

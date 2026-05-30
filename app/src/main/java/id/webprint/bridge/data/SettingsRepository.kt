@@ -15,6 +15,13 @@ class SettingsRepository(context: Context) {
             outletId = preferences.getInt(KEY_OUTLET_ID, 1),
             queueType = preferences.getString(KEY_QUEUE_TYPE, QueueType.CASHIER.value).orEmpty(),
             stationId = preferences.getString(KEY_STATION_ID, "").orEmpty(),
+            paperWidthPreset = preferences.getString(KEY_PAPER_WIDTH_PRESET, "").orEmpty().ifBlank {
+                if (preferences.getInt(KEY_PAPER_WIDTH_COLUMNS, 32) >= 48) {
+                    PaperWidthPreset.WIDTH_80.value
+                } else {
+                    PaperWidthPreset.WIDTH_58.value
+                }
+            },
             paperWidthColumns = preferences.getInt(KEY_PAPER_WIDTH_COLUMNS, 32),
             printerMode = preferences.getString(KEY_PRINTER_MODE, PrinterMode.TCP.value).orEmpty(),
             printerHost = preferences.getString(KEY_PRINTER_HOST, "").orEmpty(),
@@ -39,6 +46,7 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_OUTLET_ID, settings.outletId)
             .putString(KEY_QUEUE_TYPE, settings.queueType)
             .putString(KEY_STATION_ID, settings.stationId)
+            .putString(KEY_PAPER_WIDTH_PRESET, settings.paperWidthPreset)
             .putInt(KEY_PAPER_WIDTH_COLUMNS, settings.paperWidthColumns)
             .putString(KEY_PRINTER_MODE, settings.printerMode)
             .putString(KEY_PRINTER_HOST, settings.printerHost)
@@ -67,8 +75,15 @@ class SettingsRepository(context: Context) {
                 errors += "Station ID harus angka jika diisi"
             }
         }
-        if (settings.paperWidthColumns !in setOf(32, 48)) {
-            errors += "Lebar kertas hanya mendukung 32 atau 48 kolom"
+        when (PaperWidthPreset.fromValue(settings.paperWidthPreset)) {
+            PaperWidthPreset.AUTO,
+            PaperWidthPreset.WIDTH_58,
+            PaperWidthPreset.WIDTH_80 -> Unit
+            PaperWidthPreset.CUSTOM -> {
+                if (settings.paperWidthColumns !in 16..64) {
+                    errors += "Kolom custom harus di antara 16 sampai 64"
+                }
+            }
         }
         when (PrinterMode.fromValue(settings.printerMode)) {
             PrinterMode.TCP -> {
@@ -100,6 +115,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_OUTLET_ID = "outlet_id"
         private const val KEY_QUEUE_TYPE = "queue_type"
         private const val KEY_STATION_ID = "station_id"
+        private const val KEY_PAPER_WIDTH_PRESET = "paper_width_preset"
         private const val KEY_PAPER_WIDTH_COLUMNS = "paper_width_columns"
         private const val KEY_PRINTER_MODE = "printer_mode"
         private const val KEY_PRINTER_HOST = "printer_host"

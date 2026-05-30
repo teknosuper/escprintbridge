@@ -135,31 +135,62 @@ class EscPosPrinter(
             return job.rawBytes
         }
 
-        val output = ByteArrayOutputStream()
-        output.write(INITIALIZE)
-        when (job.type) {
-            "receipt" -> appendReceipt(output, job, settings)
-            "kitchen_ticket" -> appendKitchenTicket(output, job, settings)
-            else -> job.lines.forEach { line ->
+        if (job.lines.isNotEmpty()) {
+            val output = ByteArrayOutputStream()
+            output.write(INITIALIZE)
+            job.lines.forEach { line ->
                 appendLine(output, line)
             }
+            if (mode == PrinterMode.BLUETOOTH) {
+                output.write(FEED_6)
+            } else {
+                output.write(FEED_3)
+                output.write(CUT_FULL)
+            }
+            return output.toByteArray()
         }
-        if (mode == PrinterMode.BLUETOOTH) {
-            output.write(FEED_6)
-        } else {
-            output.write(FEED_3)
-            output.write(CUT_FULL)
+
+        if (job.type.equals("receipt", ignoreCase = true) && (job.receiptLayout != null || job.transaction != null)) {
+            val output = ByteArrayOutputStream()
+            output.write(INITIALIZE)
+            appendReceipt(output, job, settings)
+            if (mode == PrinterMode.BLUETOOTH) {
+                output.write(FEED_6)
+            } else {
+                output.write(FEED_3)
+                output.write(CUT_FULL)
+            }
+            return output.toByteArray()
         }
-        return output.toByteArray()
+
+        if (
+            job.type.equals("kitchen_ticket", ignoreCase = true) &&
+            (job.kitchenTicket != null || job.transaction != null)
+        ) {
+            val output = ByteArrayOutputStream()
+            output.write(INITIALIZE)
+            appendKitchenTicket(output, job, settings)
+            if (mode == PrinterMode.BLUETOOTH) {
+                output.write(FEED_6)
+            } else {
+                output.write(FEED_3)
+                output.write(CUT_FULL)
+            }
+            return output.toByteArray()
+        }
+
+        throw IllegalStateException(
+            "Job print tidak membawa payload final dari web. Kirim payload.raw_base64 agar Android hanya bertindak sebagai bridge printer.",
+        )
     }
 
     private fun appendReceipt(output: ByteArrayOutputStream, job: PrintJob, settings: BridgeSettings) {
-        val columns = resolveColumns(job.paperWidth, settings.paperWidthColumns)
+        val columns = resolveColumns(job.paperWidth, settings.resolvedPaperWidthColumns())
         val layout = job.receiptLayout
         val transaction = job.transaction
 
-        layout?.metaRows?.forEachIndexed { index, row ->
-            if (index == 0) {
+        layout?.metaRows?.forEach { row ->
+            if (row.label.isBlank() && row.value.isNotBlank()) {
                 output.write(ALIGN_CENTER)
                 output.write(BOLD_ON)
                 row.value.writeLineTo(output)
@@ -172,6 +203,7 @@ class EscPosPrinter(
 
         if (layout != null) {
             divider(columns).writeLineTo(output)
+            appendReceiptItemsHeader(output, columns)
             layout.items.forEach { item ->
                 appendReceiptItem(output, item, columns)
             }
@@ -188,6 +220,9 @@ class EscPosPrinter(
             layout.footerLines.forEach { line ->
                 line.writeLineTo(output)
             }
+            transaction?.invoice?.takeIf { it.isNotBlank() }?.let {
+                appendBarcode(output, it)
+            }
             output.write(ALIGN_LEFT)
             return
         }
@@ -198,7 +233,7 @@ class EscPosPrinter(
     }
 
     private fun appendKitchenTicket(output: ByteArrayOutputStream, job: PrintJob, settings: BridgeSettings) {
-        val columns = resolveColumns(job.paperWidth, settings.paperWidthColumns)
+        val columns = resolveColumns(job.paperWidth, settings.resolvedPaperWidthColumns())
         val ticket = job.kitchenTicket
         val transaction = job.transaction
 
@@ -250,6 +285,84 @@ class EscPosPrinter(
     }
 
     private fun appendReceiptItem(output: ByteArrayOutputStream, item: ReceiptItemPayload, columns: Int) {
+        formatReceiptPrimaryLine(
+            qty = item.detailLeft.orEmpty(),
+            name = item.name,
+            total = item.detailRight.orEmpty(),
+            columns = columns,
+        ).forEach { line ->
+            output.write(BOLD_ON)
+            line.writeLineTo(output)
+            output.write(BOLD_OFF)
+        }
+
+        item.promo?.takeIf { it.isNotBlank() }?.let {
+            wrapText("  Promo: $it", columns).forEach { line -> line.writeLineTo(output) }
+        }
+
+        item.modifiers.forEach { modifier ->
+            val left = listOf("  ", modifier.label).filter { it.isNotBlank() }.joinToString("")
+            formatPair(left, modifier.value, columns).forEach { it.writeLineTo(output) }
+        }
+
+        item.notes?.takeIf { it.isNotBlank() }?.let {
+            wrapText("  Catatan: $it", columns).forEach { line -> line.writeLineTo(output) }
+        }
+
+        output.write(LINE_BREAK)
+    }
+
+    private fun appendReceiptItemsHeader(output: ByteArrayOutputStream, columns: Int) {
+        formatReceiptPrimaryLine(
+            qty = "Qty",
+            name = "Item",
+            total = "Total",
+            columns = columns,
+        ).forEach { line ->
+            line.writeLineTo(output)
+        }
+        output.write(LINE_BREAK)
+    }
+
+    private fun formatReceiptPrimaryLine(qty: String, name: String, total: String, columns: Int): List<String> {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) {
+            return emptyList()
+        }
+
+        if (qty.isBlank() && total.isBlank()) {
+            return wrapText(cleanName, columns)
+        }
+
+        val qtyWidth = maxOf(3, minOf(5, qty.length.coerceAtLeast(3)))
+        val totalWidth = maxOf(6, minOf(10, total.length.coerceAtLeast(5)))
+        val nameWidth = maxOf(8, columns - qtyWidth - totalWidth - 2)
+        val nameLines = wrapText(cleanName, nameWidth).ifEmpty { listOf("") }
+
+        return nameLines.mapIndexed { index, line ->
+            when (index) {
+                0 -> qty.padEnd(qtyWidth) + " " + line.padEnd(nameWidth) + " " + total.padStart(totalWidth)
+                else -> " ".repeat(qtyWidth + 1) + line
+            }
+        }
+    }
+
+    private fun appendBarcode(output: ByteArrayOutputStream, value: String) {
+        val payload = "{B$value".toByteArray(Charsets.US_ASCII)
+        if (payload.size > 255) {
+            return
+        }
+        output.write(ALIGN_CENTER)
+        output.write(BARCODE_HRI_BELOW)
+        output.write(BARCODE_HEIGHT)
+        output.write(BARCODE_WIDTH)
+        output.write(byteArrayOf(0x1D, 0x6B, 0x49, payload.size.toByte()))
+        output.write(payload)
+        output.write(LINE_BREAK)
+        output.write(ALIGN_LEFT)
+    }
+
+    private fun appendReceiptItemLegacy(output: ByteArrayOutputStream, item: ReceiptItemPayload, columns: Int) {
         output.write(BOLD_ON)
         wrapText(item.name, columns).forEach { it.writeLineTo(output) }
         output.write(BOLD_OFF)
@@ -397,5 +510,8 @@ class EscPosPrinter(
         private val FEED_6 = byteArrayOf(0x1B, 0x64, 0x06)
         private val CUT_FULL = byteArrayOf(0x1D, 0x56, 0x00)
         private val CUT_PARTIAL = byteArrayOf(0x1D, 0x56, 0x01)
+        private val BARCODE_HRI_BELOW = byteArrayOf(0x1D, 0x48, 0x02)
+        private val BARCODE_HEIGHT = byteArrayOf(0x1D, 0x68, 0x50)
+        private val BARCODE_WIDTH = byteArrayOf(0x1D, 0x77, 0x02)
     }
 }

@@ -8,6 +8,7 @@ data class BridgeSettings(
     val outletId: Int = 1,
     val queueType: String = QueueType.CASHIER.value,
     val stationId: String = "",
+    val paperWidthPreset: String = PaperWidthPreset.WIDTH_58.value,
     val paperWidthColumns: Int = 32,
     val printerMode: String = PrinterMode.TCP.value,
     val printerHost: String = "",
@@ -26,6 +27,28 @@ data class BridgeSettings(
                 PrinterMode.BLUETOOTH.value -> bluetoothMacAddress.isNotBlank()
                 else -> printerHost.isNotBlank() && printerPort > 0
             }
+    }
+
+    fun resolvedPaperWidthColumns(): Int {
+        return when (PaperWidthPreset.fromValue(paperWidthPreset)) {
+            PaperWidthPreset.AUTO -> paperWidthColumns.takeIf { it > 0 } ?: 32
+            PaperWidthPreset.WIDTH_58 -> 32
+            PaperWidthPreset.WIDTH_80 -> 48
+            PaperWidthPreset.CUSTOM -> paperWidthColumns
+        }
+    }
+}
+
+enum class PaperWidthPreset(val value: String) {
+    AUTO("auto"),
+    WIDTH_58("58mm"),
+    WIDTH_80("80mm"),
+    CUSTOM("custom");
+
+    companion object {
+        fun fromValue(value: String?): PaperWidthPreset {
+            return entries.firstOrNull { it.value == value } ?: WIDTH_58
+        }
     }
 }
 

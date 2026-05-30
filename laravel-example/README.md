@@ -123,6 +123,10 @@ class PrintBridgeController extends Controller
 
 ## 4. Menambah job print dari Laravel
 
+Jika Android hanya berperan sebagai bridge printer, kirim payload final dari server dan biarkan Android hanya meneruskan byte ke printer.
+
+Contoh prioritas tertinggi: `raw_base64` ESC/POS dari backend.
+
 ```php
 use App\Models\PrintJob;
 use Illuminate\Support\Str;
@@ -145,6 +149,30 @@ PrintJob::create([
             ['feed' => 3],
             ['cut' => 'full'],
         ],
+    ],
+]);
+```
+
+Catatan:
+
+- Untuk queue POS yang ingin hasil print persis mengikuti sistem web, jangan kirim `layout` untuk dirender Android.
+- Kirim `payload.raw_base64` sebagai hasil final ESC/POS dari backend.
+- Alternatif kedua adalah `payload.lines`, tetapi format akhirnya tetap dibentuk dari baris yang Anda kirim.
+
+Contoh job queue POS yang mengikuti format web/server sepenuhnya:
+
+```php
+PrintJob::create([
+    'id' => (string) Str::uuid(),
+    'device_id' => 'kasir-android-01',
+    'status' => 'queued',
+    'printer' => [
+        'mode' => 'bluetooth',
+        'bluetooth_mac_address' => 'DC:0D:30:12:34:56',
+    ],
+    'payload' => [
+        // Hasil akhir ESC/POS dari sistem web/server Anda
+        'raw_base64' => base64_encode($escPosBytes),
     ],
 ]);
 ```

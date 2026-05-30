@@ -18,7 +18,12 @@
     <string name="label_queue_type_kitchen">Tiket Dapur</string>
     <string name="hint_station_id">Station ID opsional untuk dapur</string>
     <string name="hint_device_id">Device ID opsional untuk filter printer tertentu</string>
-    <string name="hint_paper_width_columns">Lebar kertas default: 32 atau 48 kolom</string>
+    <string name="hint_paper_width_preset">Preset lebar kertas</string>
+    <string name="hint_paper_width_custom_columns">Kolom custom, contoh 42</string>
+    <string name="paper_width_preset_auto">Otomatis dari job server</string>
+    <string name="paper_width_preset_58mm">58mm (default • 32 kolom)</string>
+    <string name="paper_width_preset_80mm">80mm (48 kolom)</string>
+    <string name="paper_width_preset_custom">Custom kolom</string>
     <string name="label_printer_mode">Mode Printer</string>
     <string name="label_printer_mode_tcp">TCP / LAN</string>
     <string name="label_printer_mode_bluetooth">Bluetooth</string>

@@ -76,7 +76,9 @@ class BridgeForegroundService : Service() {
                     for (job in jobs) {
                         printDelivered = false
                         updateNotification(getString(R.string.notification_printing, job.id))
-                        runtimeStateRepository.appendLog("🖨️ Mencetak job #${job.id}")
+                        runtimeStateRepository.appendLog(
+                            "🖨️ Mencetak job #${job.id} via ${resolvePayloadSource(job)}",
+                        )
                         printer.print(job, settings)
                         printDelivered = true
                         printJobRepository.markComplete(settings, job.id)
@@ -154,5 +156,15 @@ class BridgeForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "print-bridge-service"
         private const val NOTIFICATION_ID = 2001
+    }
+
+    private fun resolvePayloadSource(job: id.webprint.bridge.data.PrintJob): String {
+        return when {
+            job.rawBytes != null -> "raw_base64"
+            job.lines.isNotEmpty() -> "lines"
+            job.receiptLayout != null -> "layout"
+            job.kitchenTicket != null -> "ticket-layout"
+            else -> "unknown"
+        }
     }
 }

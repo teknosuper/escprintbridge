@@ -12,7 +12,8 @@ Client Android Kotlin berbasis `ForegroundService` untuk POS web yang polling jo
 - Mendukung printer ESC/POS via TCP/LAN dan Bluetooth Classic/SPP.
 - Menandai job selesai ke `POST /api/print-queue/{id}/done?token=...`.
 - Menandai job gagal ke `POST /api/print-queue/{id}/fail?token=...`.
-- Mencetak payload receipt dan kitchen ticket langsung dari JSON queue POS, tanpa WebView.
+- Android bertindak sebagai bridge printer: server/web harus mengirim payload print final.
+- Jika server mengirim `payload.raw_base64` atau `payload.lines`, Android akan mencetak payload itu apa adanya dan tidak memformat ulang.
 
 ## Import URL Client
 
@@ -61,6 +62,36 @@ Contoh implementasi backend ada di [laravel-example/README.md](/var/www/html/web
   "count": 1
 }
 ```
+
+Untuk mode bridge murni yang mengikuti sistem web/server, kirim payload final dari backend:
+
+```json
+{
+  "success": true,
+  "jobs": [
+    {
+      "id": 48,
+      "type": "receipt",
+      "printer": {
+        "mode": "bluetooth",
+        "bluetooth_mac_address": "DC:0D:30:12:34:56"
+      },
+      "payload": {
+        "raw_base64": "G0B..."
+      }
+    }
+  ],
+  "count": 1
+}
+```
+
+Prioritas payload di Android:
+
+1. `payload.raw_base64`
+2. `payload.lines`
+
+Jika job queue POS tidak membawa `payload.raw_base64` atau `payload.lines`, job akan ditolak. `layout` tidak lagi dirender oleh Android untuk queue POS.
+Jika Anda ingin hasil print selalu persis mengikuti perubahan dari sistem web, gunakan `payload.raw_base64` sebagai sumber utama.
 
 Jika tidak ada job:
 

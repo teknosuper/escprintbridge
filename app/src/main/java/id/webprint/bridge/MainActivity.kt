@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -18,6 +19,7 @@ import com.google.android.material.color.MaterialColors
 import id.webprint.bridge.bridge.ServiceController
 import id.webprint.bridge.data.BluetoothTransportMode
 import id.webprint.bridge.data.BridgeSettings
+import id.webprint.bridge.data.PaperWidthPreset
 import id.webprint.bridge.data.PrinterMode
 import id.webprint.bridge.data.QueueDiagnostics
 import id.webprint.bridge.data.QueueType
@@ -88,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         printerDiagnostics = PrinterDiagnostics(this)
 
         requestNotificationPermissionIfNeeded()
+        bindPaperWidthPresetOptions()
         bindForm()
         bindActions()
         renderStatus()
@@ -117,7 +120,11 @@ class MainActivity : AppCompatActivity() {
         binding.outletIdInput.setText(settings.outletId.toString())
         binding.deviceIdInput.setText(settings.deviceId)
         binding.stationIdInput.setText(settings.stationId)
-        binding.paperWidthInput.setText(settings.paperWidthColumns.toString())
+        binding.paperWidthPresetInput.setText(
+            paperWidthPresetLabel(PaperWidthPreset.fromValue(settings.paperWidthPreset)),
+            false,
+        )
+        binding.paperWidthCustomColumnsInput.setText(settings.paperWidthColumns.toString())
         binding.pollingSecondsInput.setText(settings.pollingSeconds.toString())
         binding.autoStartSwitch.isChecked = settings.autoStart
 
@@ -151,6 +158,7 @@ class MainActivity : AppCompatActivity() {
 
         updateQueueTypeSection()
         updatePrinterModeSections()
+        updatePaperWidthSection()
     }
 
     private fun bindActions() {
@@ -164,6 +172,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.printerModeGroup.setOnCheckedChangeListener { _, _ ->
             updatePrinterModeSections()
+        }
+
+        binding.paperWidthPresetInput.setOnItemClickListener { _, _, _, _ ->
+            updatePaperWidthSection()
         }
 
         binding.chooseBluetoothPrinterButton.setOnClickListener {
@@ -412,6 +424,7 @@ class MainActivity : AppCompatActivity() {
             outletId = uri.getQueryParameter("outlet_id")?.trim()?.toIntOrNull() ?: 0,
             queueType = QueueType.fromValue(uri.getQueryParameter("type")).value,
             stationId = uri.getQueryParameter("station_id")?.trim().orEmpty(),
+            paperWidthPreset = parsePaperWidthPresetFromClientUrl(uri.getQueryParameter("paper")).value,
             autoStart = uri.getQueryParameter("autostart") == "1" ||
                 uri.getQueryParameter("autostart").equals("true", ignoreCase = true),
         )
@@ -427,6 +440,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun collectSettingsFromForm(): BridgeSettings? {
         val current = settingsRepository.load()
+        val paperWidthPreset = currentPaperWidthPreset()
         val updated = current.copy(
             clientUrl = binding.clientUrlInput.text.toString().trim(),
             baseUrl = binding.baseUrlInput.text.toString().trim().removeSuffix("/"),
@@ -435,7 +449,13 @@ class MainActivity : AppCompatActivity() {
             queueType = currentQueueType().value,
             deviceId = binding.deviceIdInput.text.toString().trim(),
             stationId = binding.stationIdInput.text.toString().trim(),
-            paperWidthColumns = binding.paperWidthInput.text.toString().trim().toIntOrNull() ?: 32,
+            paperWidthPreset = paperWidthPreset.value,
+            paperWidthColumns = when (paperWidthPreset) {
+                PaperWidthPreset.AUTO -> current.paperWidthColumns.takeIf { it > 0 } ?: 32
+                PaperWidthPreset.WIDTH_58 -> 32
+                PaperWidthPreset.WIDTH_80 -> 48
+                PaperWidthPreset.CUSTOM -> binding.paperWidthCustomColumnsInput.text.toString().trim().toIntOrNull() ?: 32
+            },
             printerMode = currentPrinterMode().value,
             printerHost = binding.printerHostInput.text.toString().trim(),
             printerPort = binding.printerPortInput.text.toString().trim().toIntOrNull() ?: 9100,
@@ -462,6 +482,53 @@ class MainActivity : AppCompatActivity() {
         }
 
         return updated
+    }
+
+    private fun bindPaperWidthPresetOptions() {
+        val entries = listOf(
+            paperWidthPresetLabel(PaperWidthPreset.AUTO),
+            paperWidthPresetLabel(PaperWidthPreset.WIDTH_58),
+            paperWidthPresetLabel(PaperWidthPreset.WIDTH_80),
+            paperWidthPresetLabel(PaperWidthPreset.CUSTOM),
+        )
+
+        binding.paperWidthPresetInput.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_list_item_1, entries),
+        )
+    }
+
+    private fun currentPaperWidthPreset(): PaperWidthPreset {
+        val selected = binding.paperWidthPresetInput.text?.toString()?.trim().orEmpty()
+
+        return when (selected) {
+            paperWidthPresetLabel(PaperWidthPreset.AUTO) -> PaperWidthPreset.AUTO
+            paperWidthPresetLabel(PaperWidthPreset.WIDTH_80) -> PaperWidthPreset.WIDTH_80
+            paperWidthPresetLabel(PaperWidthPreset.CUSTOM) -> PaperWidthPreset.CUSTOM
+            else -> PaperWidthPreset.WIDTH_58
+        }
+    }
+
+    private fun updatePaperWidthSection() {
+        val customSelected = currentPaperWidthPreset() == PaperWidthPreset.CUSTOM
+        binding.paperWidthCustomColumnsLayout.visibility = if (customSelected) View.VISIBLE else View.GONE
+    }
+
+    private fun paperWidthPresetLabel(preset: PaperWidthPreset): String {
+        return when (preset) {
+            PaperWidthPreset.AUTO -> getString(R.string.paper_width_preset_auto)
+            PaperWidthPreset.WIDTH_58 -> getString(R.string.paper_width_preset_58mm)
+            PaperWidthPreset.WIDTH_80 -> getString(R.string.paper_width_preset_80mm)
+            PaperWidthPreset.CUSTOM -> getString(R.string.paper_width_preset_custom)
+        }
+    }
+
+    private fun parsePaperWidthPresetFromClientUrl(value: String?): PaperWidthPreset {
+        return when (value?.trim()?.lowercase()) {
+            "80mm", "48" -> PaperWidthPreset.WIDTH_80
+            "custom" -> PaperWidthPreset.CUSTOM
+            "auto" -> PaperWidthPreset.AUTO
+            else -> PaperWidthPreset.WIDTH_58
+        }
     }
 
     private fun runConnectionCheck() {

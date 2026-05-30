@@ -59,7 +59,7 @@ class PrinterDiagnostics(
                     PrintLine("Waktu test manual.", "left", false, 2, "full"),
                 ),
                 rawBytes = null,
-                paperWidth = if (settings.paperWidthColumns >= 48) "80mm" else "58mm",
+                paperWidth = if (settings.resolvedPaperWidthColumns() >= 48) "80mm" else "58mm",
                 receiptLayout = null,
                 transaction = null,
                 kitchenTicket = null,
