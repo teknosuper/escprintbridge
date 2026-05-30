@@ -14,6 +14,7 @@ data class BridgeSettings(
     val printerPort: Int = 9100,
     val bluetoothMacAddress: String = "",
     val bluetoothPrinterName: String = "",
+    val bluetoothTransportMode: String = BluetoothTransportMode.AUTO.value,
     val pollingSeconds: Long = 3L,
     val autoStart: Boolean = false,
 ) {
@@ -46,6 +47,18 @@ enum class PrinterMode(val value: String) {
     companion object {
         fun fromValue(value: String?): PrinterMode {
             return entries.firstOrNull { it.value == value } ?: TCP
+        }
+    }
+}
+
+enum class BluetoothTransportMode(val value: String) {
+    AUTO("auto"),
+    CLASSIC("classic"),
+    BLE("ble");
+
+    companion object {
+        fun fromValue(value: String?): BluetoothTransportMode {
+            return entries.firstOrNull { it.value == value } ?: AUTO
         }
     }
 }

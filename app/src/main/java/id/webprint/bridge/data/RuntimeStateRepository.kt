@@ -47,7 +47,6 @@ class RuntimeStateRepository(context: Context) {
             state.copy(
                 isPolling = active,
                 lastStatus = message,
-                logs = addLog(state.logs, decorate(message)),
             ),
         )
     }
@@ -59,7 +58,6 @@ class RuntimeStateRepository(context: Context) {
                 isPolling = true,
                 pollsCount = state.pollsCount + 1,
                 lastStatus = message,
-                logs = addLog(state.logs, decorate(message)),
             ),
         )
     }
@@ -96,6 +94,15 @@ class RuntimeStateRepository(context: Context) {
         )
     }
 
+    fun updateStatus(message: String) {
+        val state = load()
+        saveState(
+            state.copy(
+                lastStatus = message,
+            ),
+        )
+    }
+
     private fun saveState(state: RuntimeState) {
         preferences.edit()
             .putBoolean(KEY_IS_POLLING, state.isPolling)
@@ -123,7 +130,7 @@ class RuntimeStateRepository(context: Context) {
         if (raw.isNullOrBlank()) {
             return listOf(DEFAULT_LOG)
         }
-        return raw.split(LOG_SEPARATOR).filter { it.isNotBlank() }
+        return raw.split(LOG_SEPARATOR).filter { it.isNotBlank() }.take(MAX_LOGS)
     }
 
     companion object {
@@ -135,7 +142,7 @@ class RuntimeStateRepository(context: Context) {
         private const val KEY_LAST_STATUS = "last_status"
         private const val KEY_LOGS = "logs"
         private const val LOG_SEPARATOR = "\n---LOG---\n"
-        private const val MAX_LOGS = 100
+        private const val MAX_LOGS = 10
         private const val DEFAULT_LOG = "Siap digunakan. Isi konfigurasi lalu klik Mulai."
     }
 }

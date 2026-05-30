@@ -21,6 +21,10 @@ class SettingsRepository(context: Context) {
             printerPort = preferences.getInt(KEY_PRINTER_PORT, 9100),
             bluetoothMacAddress = preferences.getString(KEY_BLUETOOTH_MAC_ADDRESS, "").orEmpty(),
             bluetoothPrinterName = preferences.getString(KEY_BLUETOOTH_PRINTER_NAME, "").orEmpty(),
+            bluetoothTransportMode = preferences.getString(
+                KEY_BLUETOOTH_TRANSPORT_MODE,
+                BluetoothTransportMode.AUTO.value,
+            ).orEmpty(),
             pollingSeconds = preferences.getLong(KEY_POLLING_SECONDS, 3L),
             autoStart = preferences.getBoolean(KEY_AUTO_START, false),
         )
@@ -41,6 +45,7 @@ class SettingsRepository(context: Context) {
             .putInt(KEY_PRINTER_PORT, settings.printerPort)
             .putString(KEY_BLUETOOTH_MAC_ADDRESS, settings.bluetoothMacAddress)
             .putString(KEY_BLUETOOTH_PRINTER_NAME, settings.bluetoothPrinterName)
+            .putString(KEY_BLUETOOTH_TRANSPORT_MODE, settings.bluetoothTransportMode)
             .putLong(KEY_POLLING_SECONDS, settings.pollingSeconds)
             .putBoolean(KEY_AUTO_START, settings.autoStart)
             .apply()
@@ -101,6 +106,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_PRINTER_PORT = "printer_port"
         private const val KEY_BLUETOOTH_MAC_ADDRESS = "bluetooth_mac_address"
         private const val KEY_BLUETOOTH_PRINTER_NAME = "bluetooth_printer_name"
+        private const val KEY_BLUETOOTH_TRANSPORT_MODE = "bluetooth_transport_mode"
         private const val KEY_POLLING_SECONDS = "polling_seconds"
         private const val KEY_AUTO_START = "auto_start"
     }

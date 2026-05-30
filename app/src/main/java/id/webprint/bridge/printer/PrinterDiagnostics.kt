@@ -2,6 +2,8 @@ package id.webprint.bridge.printer
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.content.Context
+import id.webprint.bridge.data.BluetoothTransportMode
 import id.webprint.bridge.data.BridgeSettings
 import id.webprint.bridge.data.PrintJob
 import id.webprint.bridge.data.PrintLine
@@ -15,8 +17,11 @@ data class PrinterCheckResult(
 )
 
 class PrinterDiagnostics(
-    private val printer: EscPosPrinter = EscPosPrinter(),
+    context: Context,
+    private val printer: EscPosPrinter = EscPosPrinter(context),
 ) {
+    private val blePrinterClient = BluetoothGattPrinterClient(context.applicationContext)
+
     fun quickCheck(settings: BridgeSettings): PrinterCheckResult {
         return when (PrinterMode.fromValue(settings.printerMode)) {
             PrinterMode.TCP -> {
@@ -60,7 +65,11 @@ class PrinterDiagnostics(
                 kitchenTicket = null,
             )
             printer.print(job, settings)
-            PrinterCheckResult(true, "Test print berhasil dikirim ke printer.")
+            val transport = when (PrinterMode.fromValue(settings.printerMode)) {
+                PrinterMode.TCP -> "TCP"
+                PrinterMode.BLUETOOTH -> "Bluetooth ${BluetoothTransportMode.fromValue(settings.bluetoothTransportMode).name}"
+            }
+            PrinterCheckResult(true, "Test print selesai melalui $transport. Jika kertas belum keluar, coba ganti transport Bluetooth lalu ulangi test.")
         } catch (exception: Exception) {
             PrinterCheckResult(false, "Test print gagal: ${exception.message ?: exception.javaClass.simpleName}")
         }
@@ -87,23 +96,44 @@ class PrinterDiagnostics(
             require(adapter.isEnabled) { "Bluetooth sedang nonaktif." }
             require(settings.bluetoothMacAddress.isNotBlank()) { "MAC address printer Bluetooth kosong." }
 
-            val device = adapter.bondedDevices.firstOrNull {
-                it.address.equals(settings.bluetoothMacAddress, ignoreCase = true)
-            } ?: error("Printer Bluetooth belum paired / tidak ditemukan.")
-
-            runCatching { adapter.cancelDiscovery() }
-
-            val socket = runCatching {
-                device.createRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
-            }.getOrElse {
-                device.createInsecureRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
+            when (BluetoothTransportMode.fromValue(settings.bluetoothTransportMode)) {
+                BluetoothTransportMode.CLASSIC -> {
+                    val device = adapter.bondedDevices.firstOrNull {
+                        it.address.equals(settings.bluetoothMacAddress, ignoreCase = true)
+                    } ?: error("Printer Bluetooth Classic belum paired / tidak ditemukan.")
+                    runCatching { adapter.cancelDiscovery() }
+                    val socket = runCatching {
+                        device.createRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
+                    }.getOrElse {
+                        device.createInsecureRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
+                    }
+                    socket.use { it.connect() }
+                    PrinterCheckResult(true, "Printer Bluetooth Classic terhubung: ${device.name ?: "Unknown"}")
+                }
+                BluetoothTransportMode.BLE -> {
+                    PrinterCheckResult(true, blePrinterClient.validate(settings.bluetoothMacAddress))
+                }
+                BluetoothTransportMode.AUTO -> {
+                    val classic = runCatching {
+                        val device = adapter.bondedDevices.firstOrNull {
+                            it.address.equals(settings.bluetoothMacAddress, ignoreCase = true)
+                        } ?: error("Printer Bluetooth Classic belum paired / tidak ditemukan.")
+                        runCatching { adapter.cancelDiscovery() }
+                        val socket = runCatching {
+                            device.createRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
+                        }.getOrElse {
+                            device.createInsecureRfcommSocketToServiceRecord(EscPosPrinter.SPP_UUID)
+                        }
+                        socket.use { it.connect() }
+                        "Printer Bluetooth Auto siap melalui Classic: ${device.name ?: "Unknown"}"
+                    }
+                    if (classic.isSuccess) {
+                        PrinterCheckResult(true, classic.getOrThrow())
+                    } else {
+                        PrinterCheckResult(true, blePrinterClient.validate(settings.bluetoothMacAddress))
+                    }
+                }
             }
-
-            socket.use {
-                it.connect()
-            }
-
-            PrinterCheckResult(true, "Printer Bluetooth terhubung: ${device.name ?: "Unknown"}")
         } catch (exception: Exception) {
             PrinterCheckResult(false, "Printer Bluetooth gagal: ${exception.message ?: exception.javaClass.simpleName}")
         }
@@ -117,11 +147,19 @@ class PrinterDiagnostics(
             require(adapter.isEnabled) { "Bluetooth sedang nonaktif." }
             require(settings.bluetoothMacAddress.isNotBlank()) { "MAC address printer Bluetooth kosong." }
 
-            val device = adapter.bondedDevices.firstOrNull {
-                it.address.equals(settings.bluetoothMacAddress, ignoreCase = true)
-            } ?: error("Printer Bluetooth belum paired / tidak ditemukan.")
-
-            PrinterCheckResult(true, "Printer Bluetooth siap: ${device.name ?: "Unknown"}")
+            when (BluetoothTransportMode.fromValue(settings.bluetoothTransportMode)) {
+                BluetoothTransportMode.BLE -> {
+                    runCatching { adapter.getRemoteDevice(settings.bluetoothMacAddress) }
+                        .getOrElse { error("Perangkat BLE printer tidak dikenali.") }
+                    PrinterCheckResult(true, "Printer BLE siap: ${settings.bluetoothMacAddress}")
+                }
+                else -> {
+                    val device = adapter.bondedDevices.firstOrNull {
+                        it.address.equals(settings.bluetoothMacAddress, ignoreCase = true)
+                    } ?: error("Printer Bluetooth belum paired / tidak ditemukan.")
+                    PrinterCheckResult(true, "Printer Bluetooth siap: ${device.name ?: "Unknown"}")
+                }
+            }
         } catch (exception: Exception) {
             PrinterCheckResult(false, "Monitor Bluetooth: ${exception.message ?: exception.javaClass.simpleName}")
         }

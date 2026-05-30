@@ -22,10 +22,15 @@
     <string name="label_printer_mode">Mode Printer</string>
     <string name="label_printer_mode_tcp">TCP / LAN</string>
     <string name="label_printer_mode_bluetooth">Bluetooth</string>
+    <string name="label_bluetooth_transport">Transport Bluetooth</string>
+    <string name="label_bluetooth_transport_auto">Auto</string>
+    <string name="label_bluetooth_transport_classic">Classic</string>
+    <string name="label_bluetooth_transport_ble">BLE</string>
     <string name="hint_printer_host">IP printer ESC/POS, contoh 192.168.1.50</string>
     <string name="hint_printer_port">Port printer, biasanya 9100</string>
     <string name="hint_bluetooth_printer_name">Nama printer Bluetooth terpilih</string>
     <string name="hint_bluetooth_mac_address">MAC address printer Bluetooth</string>
+    <string name="bluetooth_transport_help">Gunakan Auto dulu. Jika printer terhubung tapi tidak mencetak, coba ganti ke Classic atau BLE lalu jalankan Test Printer lagi.</string>
     <string name="hint_polling_seconds">Interval polling detik</string>
     <string name="label_auto_start">Aktifkan auto-start setelah boot/update aplikasi</string>
     <string name="button_choose_bluetooth_printer">Pilih Printer Bluetooth Terpasang</string>

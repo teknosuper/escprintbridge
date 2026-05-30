@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.Context
+import id.webprint.bridge.data.BluetoothTransportMode
 import id.webprint.bridge.data.BridgeSettings
 import id.webprint.bridge.data.KitchenItemPayload
 import id.webprint.bridge.data.LabelValueRow
@@ -12,15 +14,20 @@ import id.webprint.bridge.data.PrintJob
 import id.webprint.bridge.data.PrintLine
 import id.webprint.bridge.data.ReceiptItemPayload
 import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
 
-class EscPosPrinter {
+class EscPosPrinter(
+    context: Context,
+) {
+
+    private val blePrinterClient = BluetoothGattPrinterClient(context.applicationContext)
 
     fun print(job: PrintJob, settings: BridgeSettings) {
         val mode = resolvePrinterMode(job, settings)
-        val bytes = buildPayload(job, settings)
+        val bytes = buildPayload(job, settings, mode)
 
         when (mode) {
             PrinterMode.TCP -> printTcp(job, settings, bytes)
@@ -41,10 +48,7 @@ class EscPosPrinter {
         Socket().use { socket ->
             socket.connect(InetSocketAddress(host, port), timeoutMs)
             socket.soTimeout = timeoutMs
-            socket.getOutputStream().use { output ->
-                output.write(bytes)
-                output.flush()
-            }
+            writeEscPosPayload(socket.getOutputStream(), bytes)
         }
     }
 
@@ -53,6 +57,20 @@ class EscPosPrinter {
         val macAddress = job.bluetoothMacAddress ?: settings.bluetoothMacAddress
         require(macAddress.isNotBlank()) { "Printer Bluetooth belum dipilih" }
 
+        when (BluetoothTransportMode.fromValue(settings.bluetoothTransportMode)) {
+            BluetoothTransportMode.CLASSIC -> printBluetoothClassic(macAddress, bytes)
+            BluetoothTransportMode.BLE -> blePrinterClient.print(macAddress, bytes)
+            BluetoothTransportMode.AUTO -> {
+                val classicResult = runCatching { printBluetoothClassic(macAddress, bytes) }
+                if (classicResult.isFailure) {
+                    blePrinterClient.print(macAddress, bytes)
+                }
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun printBluetoothClassic(macAddress: String, bytes: ByteArray) {
         val adapter = BluetoothAdapter.getDefaultAdapter()
             ?: error("Bluetooth tidak tersedia di device ini")
 
@@ -65,25 +83,54 @@ class EscPosPrinter {
             adapter.cancelDiscovery()
         }
 
-        openBluetoothSocket(device).use { socket ->
-            socket.connect()
-            socket.outputStream.use { output ->
-                output.write(bytes)
-                output.flush()
-            }
+        connectBluetoothSocket(device).use { socket ->
+            writeEscPosPayload(socket.outputStream, bytes)
         }
     }
 
     @SuppressLint("MissingPermission")
-    private fun openBluetoothSocket(device: BluetoothDevice): BluetoothSocket {
-        return runCatching {
-            device.createRfcommSocketToServiceRecord(SPP_UUID)
-        }.getOrElse {
-            device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
+    private fun connectBluetoothSocket(device: BluetoothDevice): BluetoothSocket {
+        val attempts = listOf<(BluetoothDevice) -> BluetoothSocket>(
+            { target -> target.createRfcommSocketToServiceRecord(SPP_UUID) },
+            { target -> target.createInsecureRfcommSocketToServiceRecord(SPP_UUID) },
+            { target ->
+                val method = target.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                method.invoke(target, 1) as BluetoothSocket
+            },
+        )
+
+        var lastError: Throwable? = null
+        attempts.forEachIndexed { index, createSocket ->
+            val socket = runCatching { createSocket(device) }.getOrElse {
+                lastError = it
+                return@forEachIndexed
+            }
+
+            try {
+                socket.connect()
+                return socket
+            } catch (exception: Exception) {
+                lastError = exception
+                runCatching { socket.close() }
+            }
+        }
+
+        throw IllegalStateException(
+            "Gagal membuka koneksi Bluetooth printer. ${lastError?.message ?: "Socket connect error"}",
+            lastError,
+        )
+    }
+
+    private fun writeEscPosPayload(output: OutputStream, bytes: ByteArray) {
+        output.use {
+            it.write(bytes)
+            it.flush()
+            // Beberapa printer thermal Bluetooth butuh jeda singkat sebelum socket ditutup.
+            Thread.sleep(350)
         }
     }
 
-    private fun buildPayload(job: PrintJob, settings: BridgeSettings): ByteArray {
+    private fun buildPayload(job: PrintJob, settings: BridgeSettings, mode: PrinterMode): ByteArray {
         if (job.rawBytes != null) {
             return job.rawBytes
         }
@@ -97,8 +144,12 @@ class EscPosPrinter {
                 appendLine(output, line)
             }
         }
-        output.write(FEED_3)
-        output.write(CUT_FULL)
+        if (mode == PrinterMode.BLUETOOTH) {
+            output.write(FEED_6)
+        } else {
+            output.write(FEED_3)
+            output.write(CUT_FULL)
+        }
         return output.toByteArray()
     }
 
@@ -343,6 +394,7 @@ class EscPosPrinter {
         private val ALIGN_CENTER = byteArrayOf(0x1B, 0x61, 0x01)
         private val ALIGN_RIGHT = byteArrayOf(0x1B, 0x61, 0x02)
         private val FEED_3 = byteArrayOf(0x1B, 0x64, 0x03)
+        private val FEED_6 = byteArrayOf(0x1B, 0x64, 0x06)
         private val CUT_FULL = byteArrayOf(0x1D, 0x56, 0x00)
         private val CUT_PARTIAL = byteArrayOf(0x1D, 0x56, 0x01)
     }

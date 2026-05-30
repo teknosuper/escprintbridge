@@ -16,6 +16,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.material.color.MaterialColors
 import id.webprint.bridge.bridge.ServiceController
+import id.webprint.bridge.data.BluetoothTransportMode
 import id.webprint.bridge.data.BridgeSettings
 import id.webprint.bridge.data.PrinterMode
 import id.webprint.bridge.data.QueueDiagnostics
@@ -40,8 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var runtimeStateRepository: RuntimeStateRepository
     private lateinit var serviceController: ServiceController
     private lateinit var bluetoothPrinterRepository: BluetoothPrinterRepository
+    private lateinit var printerDiagnostics: PrinterDiagnostics
     private val queueDiagnostics = QueueDiagnostics()
-    private val printerDiagnostics = PrinterDiagnostics()
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var refreshTick = 0
     private var lastAlertMessage: String? = null
@@ -84,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         runtimeStateRepository = RuntimeStateRepository(this)
         serviceController = ServiceController(this)
         bluetoothPrinterRepository = BluetoothPrinterRepository()
+        printerDiagnostics = PrinterDiagnostics(this)
 
         requestNotificationPermissionIfNeeded()
         bindForm()
@@ -139,6 +141,13 @@ class MainActivity : AppCompatActivity() {
         binding.printerPortInput.setText(settings.printerPort.toString())
         binding.bluetoothMacAddressInput.setText(settings.bluetoothMacAddress)
         binding.bluetoothPrinterNameInput.setText(settings.bluetoothPrinterName)
+        binding.bluetoothTransportGroup.check(
+            when (BluetoothTransportMode.fromValue(settings.bluetoothTransportMode)) {
+                BluetoothTransportMode.CLASSIC -> R.id.bluetoothTransportClassic
+                BluetoothTransportMode.BLE -> R.id.bluetoothTransportBle
+                BluetoothTransportMode.AUTO -> R.id.bluetoothTransportAuto
+            },
+        )
 
         updateQueueTypeSection()
         updatePrinterModeSections()
@@ -172,7 +181,6 @@ class MainActivity : AppCompatActivity() {
         binding.saveButton.setOnClickListener {
             val updated = collectSettingsFromForm() ?: return@setOnClickListener
             settingsRepository.save(updated)
-            runtimeStateRepository.appendLog("Konfigurasi tersimpan.")
             renderStatus(getString(R.string.settings_saved))
             showSuccessToast(getString(R.string.settings_saved))
         }
@@ -180,7 +188,7 @@ class MainActivity : AppCompatActivity() {
         binding.startButton.setOnClickListener {
             if (isServiceActive()) {
                 serviceController.stop()
-                runtimeStateRepository.appendLog("Permintaan stop service dikirim.")
+                runtimeStateRepository.updateStatus("Permintaan stop service dikirim.")
                 renderStatus(getString(R.string.service_stop_requested))
                 return@setOnClickListener
             }
@@ -192,8 +200,13 @@ class MainActivity : AppCompatActivity() {
                 setBusy(true)
                 val queueResult = withContext(Dispatchers.IO) { queueDiagnostics.check(updated) }
                 val printerResult = withContext(Dispatchers.IO) { printerDiagnostics.validate(updated) }
-                runtimeStateRepository.appendLog("Validasi queue: ${queueResult.message}")
-                runtimeStateRepository.appendLog("Validasi printer: ${printerResult.message}")
+                runtimeStateRepository.updateStatus(
+                    if (queueResult.ok && printerResult.ok) {
+                        getString(R.string.connection_check_ok)
+                    } else {
+                        getString(R.string.connection_check_failed)
+                    },
+                )
                 if (!queueResult.ok || !printerResult.ok) {
                     renderStatus(getString(R.string.start_blocked_validation))
                     showErrorAlert(
@@ -259,7 +272,7 @@ class MainActivity : AppCompatActivity() {
                 R.string.status_printer_bluetooth,
                 settings.bluetoothPrinterName.ifBlank { "-" },
                 settings.bluetoothMacAddress.ifBlank { "-" },
-            )
+            ) + " / " + BluetoothTransportMode.fromValue(settings.bluetoothTransportMode).name
         }
     }
 
@@ -371,6 +384,14 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun currentBluetoothTransportMode(): BluetoothTransportMode {
+        return when (binding.bluetoothTransportGroup.checkedRadioButtonId) {
+            R.id.bluetoothTransportClassic -> BluetoothTransportMode.CLASSIC
+            R.id.bluetoothTransportBle -> BluetoothTransportMode.BLE
+            else -> BluetoothTransportMode.AUTO
+        }
+    }
+
     private fun importSettingsFromClientUrl() {
         val rawUrl = binding.clientUrlInput.text.toString().trim()
         if (rawUrl.isBlank()) {
@@ -420,6 +441,7 @@ class MainActivity : AppCompatActivity() {
             printerPort = binding.printerPortInput.text.toString().trim().toIntOrNull() ?: 9100,
             bluetoothMacAddress = binding.bluetoothMacAddressInput.text.toString().trim(),
             bluetoothPrinterName = binding.bluetoothPrinterNameInput.text.toString().trim(),
+            bluetoothTransportMode = currentBluetoothTransportMode().value,
             pollingSeconds = binding.pollingSecondsInput.text.toString().trim().toLongOrNull() ?: 3L,
             autoStart = binding.autoStartSwitch.isChecked,
         )
@@ -431,7 +453,7 @@ class MainActivity : AppCompatActivity() {
         if (errors.isNotEmpty()) {
             val text = errors.joinToString("\n")
             binding.statusText.text = text
-            runtimeStateRepository.appendLog("Validasi gagal: $text")
+            runtimeStateRepository.updateStatus("Validasi gagal.")
             showErrorAlert(
                 title = getString(R.string.alert_validation_failed_title),
                 message = text,
@@ -447,12 +469,15 @@ class MainActivity : AppCompatActivity() {
         settingsRepository.save(settings)
         uiScope.launch {
             setBusy(true)
-            runtimeStateRepository.appendLog("Memeriksa koneksi queue dan printer...")
             val queueResult = withContext(Dispatchers.IO) { queueDiagnostics.check(settings) }
-            runtimeStateRepository.appendLog("Queue URL: ${queueResult.pollUrl}")
-            runtimeStateRepository.appendLog(queueResult.message)
             val printerResult = withContext(Dispatchers.IO) { printerDiagnostics.validate(settings) }
-            runtimeStateRepository.appendLog(printerResult.message)
+            runtimeStateRepository.updateStatus(
+                if (queueResult.ok && printerResult.ok) {
+                    getString(R.string.connection_check_ok)
+                } else {
+                    getString(R.string.connection_check_failed)
+                },
+            )
             if (queueResult.ok && printerResult.ok) {
                 showSuccessToast(getString(R.string.connection_check_ok))
             } else {
@@ -477,16 +502,14 @@ class MainActivity : AppCompatActivity() {
         settingsRepository.save(settings)
         uiScope.launch {
             setBusy(true)
-            runtimeStateRepository.appendLog("Menjalankan test printer...")
             val printerCheck = withContext(Dispatchers.IO) { printerDiagnostics.validate(settings) }
-            runtimeStateRepository.appendLog(printerCheck.message)
             if (!printerCheck.ok) {
+                runtimeStateRepository.updateStatus(printerCheck.message)
                 renderStatus(getString(R.string.printer_test_failed))
                 setBusy(false)
                 return@launch
             }
             val printResult = withContext(Dispatchers.IO) { printerDiagnostics.testPrint(settings) }
-            runtimeStateRepository.appendLog(printResult.message)
             if (printResult.ok) {
                 runtimeStateRepository.registerPrinted("✅ Test print berhasil")
                 renderStatus(getString(R.string.printer_test_ok))
@@ -535,7 +558,7 @@ class MainActivity : AppCompatActivity() {
         uiScope.launch {
             val quickPrinter = withContext(Dispatchers.IO) { printerDiagnostics.quickCheck(settings) }
             if (!quickPrinter.ok) {
-                runtimeStateRepository.appendLog("⚠️ ${quickPrinter.message}")
+                runtimeStateRepository.updateStatus(quickPrinter.message)
                 showRuntimeAlertOnce(quickPrinter.message)
                 renderStatus()
             }

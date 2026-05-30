@@ -39,14 +39,14 @@ class BridgeForegroundService : Service() {
         settingsRepository = SettingsRepository(this)
         runtimeStateRepository = RuntimeStateRepository(this)
         printJobRepository = PrintJobRepository(settingsRepository)
-        printer = EscPosPrinter()
+        printer = EscPosPrinter(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.notification_idle)))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (loopJob?.isActive == true) {
-            runtimeStateRepository.appendLog("Polling sudah aktif.")
+            runtimeStateRepository.updateStatus("Polling sudah aktif.")
             return START_STICKY
         }
 
@@ -56,7 +56,7 @@ class BridgeForegroundService : Service() {
                 val settings = settingsRepository.load()
                 if (!settings.isReady()) {
                     updateNotification(getString(R.string.notification_waiting_config))
-                    runtimeStateRepository.appendLog("Konfigurasi belum lengkap.")
+                    runtimeStateRepository.updateStatus("Konfigurasi belum lengkap.")
                     delay(5_000)
                     continue
                 }
